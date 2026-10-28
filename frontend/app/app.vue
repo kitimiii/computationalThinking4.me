@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import type { Note } from '~/types/note'
+import type { Variant } from '~/utils/variants'
 
-const note = ref<Note>({ x: 120, y: 120, width: 192, height: 192, text: 'Hello, board!' })
-const selected = ref(false)
+const { objects, select, addObject } = useBoard()
+const canvas = useTemplateRef('canvas')
+
+function add(variant: Variant) {
+  addObject(variant, canvas.value?.viewCenter() ?? { x: 0, y: 0 })
+}
+
+useShortcuts(add)
 </script>
 
 <template>
-  <InfiniteCanvas @pointerdown="selected = false">
-    <StickyNote v-model="note" :selected="selected" @select="selected = true" />
+  <InfiniteCanvas ref="canvas" @pointerdown="select(null)">
+    <StickyNote v-for="object in objects" :key="object.id" :object="object" />
+    <ObjectToolbar />
   </InfiniteCanvas>
+  <Toolbar @add="add" />
 </template>

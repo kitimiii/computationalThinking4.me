@@ -39,6 +39,13 @@ function onPointerMove(event: PointerEvent) {
 function onPointerUp() {
   dragging = false
 }
+
+// The board point currently shown in the middle of the screen.
+function viewCenter() {
+  return { x: (window.innerWidth / 2 - offset.x) / scale.value, y: (window.innerHeight / 2 - offset.y) / scale.value }
+}
+
+defineExpose({ viewCenter })
 </script>
 
 <template>
