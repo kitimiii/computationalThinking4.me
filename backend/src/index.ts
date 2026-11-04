@@ -1,0 +1,6 @@
+import { serve } from '@hono/node-server'
+import { app } from './app'
+
+const port = 3001
+
+serve({ fetch: app.fetch, port }, () => console.log(`Backend listening on http://localhost:${port}`))

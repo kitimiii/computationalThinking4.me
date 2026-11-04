@@ -9,38 +9,67 @@ const DEFAULTS: Record<BoardObject['type'], Rect & Partial<TextObject>> = {
   'circle': { x: 0, y: 0, width: GRID_SIZE * 6, height: GRID_SIZE * 6 },
 }
 
+const API = 'http://localhost:3001'
+const PATCH_DELAY_MS = 300
+
+// Changes waiting for their PATCH, and the timers that will send them (per object id).
+const pending = new Map<string, object>()
+const timers = new Map<string, ReturnType<typeof setTimeout>>()
+
 // The board state is the single source of truth for which objects exist and what they look like.
 // Components only read it; every change goes through one of the functions below.
 export function useBoard() {
-  const objects = useState<BoardObject[]>('objects', () => [
-    { id: 'note-1', type: 'sticky-note', x: 120, y: 120, width: 192, height: 192, text: 'Hello, board!', color: 'yellow', fontSize: FONT_SIZES.M, bold: false },
-    { id: 'note-2', type: 'sticky-note', x: 360, y: 120, width: 192, height: 192, text: 'Drag me around', color: 'pink', fontSize: FONT_SIZES.M, bold: false },
-    { id: 'text-1', type: 'text', x: 600, y: 120, width: 240, height: 72, text: 'Just some text', fontSize: FONT_SIZES.M, bold: false },
-    { id: 'circle-1', type: 'circle', x: 600, y: 240, width: 144, height: 144, color: 'blue' },
-  ])
+  const objects = useState<BoardObject[]>('objects', () => [])
+  const loaded = useState('objects-loaded', () => false)
+
+  // Every change is applied locally first, then reported to the backend.
+  function send(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: object) {
+    $fetch(`${API}${path}`, { method, body }).catch(console.error)
+  }
+
+  if (import.meta.client && !loaded.value) {
+    loaded.value = true
+    $fetch<BoardObject[]>(`${API}/objects`).then(list => (objects.value = list)).catch(console.error)
+  }
 
   function addObject(template: ObjectTemplate, centerX: number, centerY: number) {
     const defaults = DEFAULTS[template.type]
     const id = crypto.randomUUID()
     const x = snapToGrid(centerX - defaults.width / 2)
     const y = snapToGrid(centerY - defaults.height / 2)
-    objects.value = [...objects.value, { ...defaults, ...template, id, x, y } as BoardObject]
+    const object = { ...defaults, ...template, id, x, y } as BoardObject
+    objects.value = [...objects.value, object]
+    send('/objects', 'POST', object)
     return id
   }
 
   // Works for every variant: the copy keeps all attributes except the id.
   function addCopy(source: BoardObject) {
     const id = crypto.randomUUID()
-    objects.value = [...objects.value, { ...source, id }]
+    const object = { ...source, id }
+    objects.value = [...objects.value, object]
+    send('/objects', 'POST', object)
     return id
   }
 
   function removeObject(id: string) {
     objects.value = objects.value.filter(object => object.id !== id)
+    clearTimeout(timers.get(id))
+    timers.delete(id)
+    pending.delete(id)
+    send(`/objects/${id}`, 'DELETE')
   }
 
+  // Local state changes on every call; the backend gets one PATCH with the merged changes after a pause.
   function updateObject(id: string, changes: Partial<Rect> & StyleChanges & { text?: string }) {
     objects.value = objects.value.map(object => (object.id === id ? ({ ...object, ...changes } as BoardObject) : object))
+    pending.set(id, { ...pending.get(id), ...changes })
+    clearTimeout(timers.get(id))
+    timers.set(id, setTimeout(() => {
+      send(`/objects/${id}`, 'PATCH', pending.get(id))
+      timers.delete(id)
+      pending.delete(id)
+    }, PATCH_DELAY_MS))
   }
 
   function moveObject(id: string, x: number, y: number) {
