@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import type { BoardObject, GestureMode, ObjectTemplate, Rect } from '~/types/canvas-object'
-import { House as HouseIcon } from '@lucide/vue'
+import { House as HouseIcon, UserPlus as UserPlusIcon } from '@lucide/vue'
 import { CircleShape, PlainText, StickyNote } from '#components'
 
 // Which component renders which variant of canvas object.
@@ -12,7 +12,8 @@ const VARIANTS: Record<BoardObject['type'], Component> = {
 }
 
 const { objects, load, addObject, resizeObject, updateText, updateStyle } = useBoard()
-const board = await useBoards().getBoard(useRoute().params.id as string)
+const { getBoard, addMember } = useBoards()
+const board = await getBoard(useRoute().params.id as string)
 if (board) await load(board.id)
 
 // Local UI state of this user; it is not part of the shared board state.
@@ -52,6 +53,14 @@ function onEdit(object: BoardObject) {
   selectedId.value = object.id
   if ('text' in object) editingId.value = object.id
 }
+
+// Only people who have logged in at least once can be found by their email.
+async function onAddMember() {
+  const email = window.prompt('E-Mail der Person, die mitmachen soll')
+  if (!email) return
+  const member = await addMember(board!.id, email)
+  window.alert(member ? `${member.name} ist jetzt Mitglied.` : 'Diese Person muss sich erst einmal anmelden.')
+}
 </script>
 
 <template>
@@ -84,12 +93,23 @@ function onEdit(object: BoardObject) {
       @change="changes => updateStyle(selectedObject!.id, changes)"
     />
     <ObjectToolbar @add="onAdd" />
-    <NuxtLink
-      to="/"
-      aria-label="Back to all boards"
-      class="fixed left-6 top-6 flex size-10 items-center justify-center rounded-xl border bg-white shadow-lg hover:bg-muted"
-    >
-      <HouseIcon class="size-5" />
-    </NuxtLink>
+    <HoverLabel text="Zurück zur Übersicht" class="fixed left-6 top-6">
+      <NuxtLink
+        to="/"
+        aria-label="Zurück zur Übersicht"
+        class="flex size-10 items-center justify-center rounded-xl border bg-white shadow-lg hover:bg-muted"
+      >
+        <HouseIcon class="size-5" />
+      </NuxtLink>
+    </HoverLabel>
+    <HoverLabel text="Mitglied hinzufügen" align="end" class="fixed right-6 top-6">
+      <button
+        aria-label="Mitglied hinzufügen"
+        class="flex size-10 items-center justify-center rounded-xl border bg-white shadow-lg hover:bg-muted"
+        @click="onAddMember"
+      >
+        <UserPlusIcon class="size-5" />
+      </button>
+    </HoverLabel>
   </div>
 </template>
